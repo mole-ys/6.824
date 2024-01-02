@@ -22,7 +22,9 @@ type ExampleReply struct {
 	Y int
 }
 
-type GetTaskReq struct {
+// Add your RPC definitions here.
+// 获取任务
+type TaskReq struct {
 	Id int //给worker一个id
 }
 type TaskRes struct {
@@ -30,7 +32,6 @@ type TaskRes struct {
 	FileName string //文件名
 }
 
-// Add your RPC definitions here.
 
 
 // Cook up a unique-ish UNIX-domain socket name

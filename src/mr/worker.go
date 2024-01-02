@@ -1,10 +1,14 @@
 package mr
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"io/ioutil"
 	"log"
 	"net/rpc"
+	"os"
+	"sort"
 	"time"
 )
 
@@ -29,6 +33,14 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
+// for sorting by key.
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
+
 
 //
 // main/mrworker.go calls this function.
@@ -38,29 +50,61 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	// Your worker implementation here.
 
-	// filename := "pg-being_ernest.txt"
-	// file, err := os.Open(filename)
-	// if err != nil {
-	// 	log.Fatalf("cannot open %v", filename)
-	// }
-	// content, err := ioutil.ReadAll(file)
-	// if err != nil {
-	// 	log.Fatalf("cannot read %v", filename)
-	// }
-	// file.Close()
-	// // 调用wc中的map函数
-	// // 最后返回一个切片
-	// kva := mapf(filename, string(content))
-	// fmt.Println(kva[:5])
 
 	// 使用时间作为ID
 	currentTime := time.Now().Unix()
 
 	// uncomment to send the Example RPC to the coordinator.
 	// CallExample()
-	time.Sleep(2 * time.Second)
-	CallForTask(int(currentTime))
+	for(true){
+		task, filename := CallForTask(int(currentTime))
+		if(task == "Map"){
+			MapTask(mapf, filename)
+		}
+		time.Sleep(1000 * time.Second)
+	}
+}
 
+func MapTask(mapf func(string, string) []KeyValue, filename string) (bool, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Printf("cannot open %v", filename)
+		return false, err
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		fmt.Printf("cannot read %v", filename)
+		return false, err
+	}
+	file.Close()
+	// 调用wc中的map函数
+	// 最后返回一个切片
+	kva := mapf(filename, string(content))
+	CombineAndSave(kva, "mr-1-1.txt")
+	// fmt.Fprintf(f, "%v \n", kva)
+
+	return true, nil
+}
+
+func CombineAndSave(kva []KeyValue, filename string)  {
+	sort.Sort(ByKey(kva))
+
+	// 假设任务号为1
+	savefile, err := os.Create("intermediatesave/" + filename)
+	if err != nil {
+		log.Fatalf(err.Error())
+		log.Fatalf("cannot create %v", filename)
+	}
+	defer savefile.Close()
+	enc := json.NewEncoder(savefile)
+	for kv := range kva {
+		// fmt.Println(kva[kv])
+    	err := enc.Encode(&kva[kv])
+		if err != nil {
+			log.Fatalf("Save failed :" + err.Error())
+		}
+	}
+	
 }
 
 //
@@ -92,10 +136,10 @@ func CallExample() {
 	}
 }
 
-func CallForTask(currentTime int) {
+func CallForTask(currentTime int) (string, string) {
 
 	// declare an argument structure.
-	req := GetTaskReq{}
+	req := TaskReq{}
 
 	// fill in the argument(s).
 	req.Id = currentTime
@@ -107,13 +151,18 @@ func CallForTask(currentTime int) {
 	// the "Coordinator.Example" tells the
 	// receiving server that we'd like to call
 	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Example", &req, &reply)
+	ok := call("Coordinator.Task", &req, &reply)
 	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("reply.Y %v\n", reply.Y)
+		fmt.Printf("任务类型 %s\n", reply.Task)
+		fmt.Printf("处理文件 %s\n", reply.FileName)	
 	} else {
 		fmt.Printf("call failed!\n")
 	}
+	return reply.Task, reply.FileName
+}
+
+func SendResult() {
+
 }
 
 //

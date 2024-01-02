@@ -1,15 +1,24 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
+import (
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+)
 
+// go run mrcoordinator.go wc.so pg*txt
 
 type Coordinator struct {
 	// Your definitions here.
-
+	// worker id
+	IdMap map[int]int
+	// 文件名
+	FileNames []string
+	// 任务 key为文件名，value为是否完成
+	Tasks map[string]bool
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -21,6 +30,27 @@ type Coordinator struct {
 //
 func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	reply.Y = args.X + 1
+	return nil
+}
+
+func (c *Coordinator) Task(req *TaskReq, res *TaskRes) error {
+	_, exists := c.IdMap[req.Id]
+	if (!exists) {
+		fmt.Println("有新worker加入, id为", req.Id)
+		c.IdMap[req.Id] = 1
+	}else {
+		fmt.Printf("worker %d 开始取任务\n", req.Id)
+	}
+
+	res.Task = "Map"
+	for filename, done := range c.Tasks {
+		if(!done){
+			res.FileName = filename
+			fmt.Println(filename)
+		}
+	}
+	
+	
 	return nil
 }
 
@@ -63,8 +93,15 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 
 	// Your code here.
+	c.IdMap = make(map[int]int)
+	c.Tasks = make(map[string]bool)
+	for _, filename := range os.Args[2:] {
+		c.FileNames = append(c.FileNames, filename)
+		// fmt.Println(filename)
+		c.Tasks[filename] = false
+	}
 
-
+	// fmt.Println(c.FileNames[0])
 	c.server()
 	return &c
 }
