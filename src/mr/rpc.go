@@ -30,6 +30,17 @@ type TaskReq struct {
 type TaskRes struct {
 	Task string //任务类型
 	FileName string //文件名
+	TaskId int // 任务号
+}
+
+// 任务响应
+type ResultReq struct {
+	Task string //任务类型
+	FileName string //文件名
+	Succeed bool //是否成功
+}
+type ResultRes struct {
+	Received bool //是否接受到
 }
 
 

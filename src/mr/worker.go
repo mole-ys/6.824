@@ -57,15 +57,22 @@ func Worker(mapf func(string, string) []KeyValue,
 	// uncomment to send the Example RPC to the coordinator.
 	// CallExample()
 	for(true){
-		task, filename := CallForTask(int(currentTime))
+		task, filename, id := CallForTask(int(currentTime))
 		if(task == "Map"){
-			MapTask(mapf, filename)
+			succeed, err := MapTask(mapf, filename, id)
+			if err != nil {
+				fmt.Printf("task failed: %v %v %v", task, filename, id)
+			} else{
+				// 可能需要加重试
+				SendResult(filename, succeed, task)
+			}
+
 		}
-		time.Sleep(1000 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
 
-func MapTask(mapf func(string, string) []KeyValue, filename string) (bool, error) {
+func MapTask(mapf func(string, string) []KeyValue, filename string, id int) (bool, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		fmt.Printf("cannot open %v", filename)
@@ -80,7 +87,8 @@ func MapTask(mapf func(string, string) []KeyValue, filename string) (bool, error
 	// 调用wc中的map函数
 	// 最后返回一个切片
 	kva := mapf(filename, string(content))
-	CombineAndSave(kva, "mr-1-1.txt")
+	mrname := fmt.Sprintf("mr-%d-%d.txt", id, id)
+	CombineAndSave(kva, mrname)
 	// fmt.Fprintf(f, "%v \n", kva)
 
 	return true, nil
@@ -89,7 +97,6 @@ func MapTask(mapf func(string, string) []KeyValue, filename string) (bool, error
 func CombineAndSave(kva []KeyValue, filename string)  {
 	sort.Sort(ByKey(kva))
 
-	// 假设任务号为1
 	savefile, err := os.Create("intermediatesave/" + filename)
 	if err != nil {
 		log.Fatalf(err.Error())
@@ -136,7 +143,7 @@ func CallExample() {
 	}
 }
 
-func CallForTask(currentTime int) (string, string) {
+func CallForTask(currentTime int) (string, string, int) {
 
 	// declare an argument structure.
 	req := TaskReq{}
@@ -156,13 +163,27 @@ func CallForTask(currentTime int) (string, string) {
 		fmt.Printf("任务类型 %s\n", reply.Task)
 		fmt.Printf("处理文件 %s\n", reply.FileName)	
 	} else {
-		fmt.Printf("call failed!\n")
+		fmt.Printf("Task call failed!\n")
 	}
-	return reply.Task, reply.FileName
+	return reply.Task, reply.FileName, reply.TaskId
 }
 
-func SendResult() {
+func SendResult(filename string, succeed bool, task string) (bool) {
+	// declare an argument structure.
+	req := ResultReq{}
 
+	// fill in the argument(s).
+	req.FileName = filename
+	req.Succeed = succeed
+	req.Task = task
+
+	// declare a reply structure.
+	reply := ResultRes{}
+	ok := call("Coordinator.Result", &req, &reply)
+	if !ok {
+		fmt.Printf("sendresult call failed!\n")
+	}
+	return reply.Received
 }
 
 //

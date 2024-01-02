@@ -18,7 +18,8 @@ type Coordinator struct {
 	// 文件名
 	FileNames []string
 	// 任务 key为文件名，value为是否完成
-	Tasks map[string]bool
+	MapTasks map[string]bool
+	ReduceTasks map[string]bool
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -34,6 +35,7 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 }
 
 func (c *Coordinator) Task(req *TaskReq, res *TaskRes) error {
+	// 存在并发问题，待加锁
 	_, exists := c.IdMap[req.Id]
 	if (!exists) {
 		fmt.Println("有新worker加入, id为", req.Id)
@@ -43,14 +45,26 @@ func (c *Coordinator) Task(req *TaskReq, res *TaskRes) error {
 	}
 
 	res.Task = "Map"
-	for filename, done := range c.Tasks {
+	for id, filename := range c.FileNames {
+		done := c.MapTasks[filename]
 		if(!done){
 			res.FileName = filename
-			fmt.Println(filename)
+			res.TaskId = id // 任务id
+			fmt.Print(filename + " ")
+			fmt.Println(done)
 		}
 	}
-	
-	
+	return nil
+}
+
+func (c *Coordinator) Result(req *ResultReq, res *ResultRes) error {
+	fmt.Println("收到执行结果")
+	if(req.Succeed){
+		if(req.Task == "Map"){
+			c.MapTasks[req.FileName] = true
+		}
+	}
+	res.Received = true
 	return nil
 }
 
@@ -94,11 +108,11 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	// Your code here.
 	c.IdMap = make(map[int]int)
-	c.Tasks = make(map[string]bool)
+	c.MapTasks = make(map[string]bool)
 	for _, filename := range os.Args[2:] {
 		c.FileNames = append(c.FileNames, filename)
 		// fmt.Println(filename)
-		c.Tasks[filename] = false
+		c.MapTasks[filename] = false
 	}
 
 	// fmt.Println(c.FileNames[0])
